@@ -1,0 +1,15 @@
+[project]
+name = "hiwindows-io"
+version = "0.1.0"
+description = "Input/output package for HiWindows."
+requires-python = ">=3.14"
+dependencies = [
+    "hiwindows-core",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hiwindows_io"]
