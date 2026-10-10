@@ -6,6 +6,7 @@ from enum import Enum
 class AppType(Enum):
     """应用类型。"""
     TOOL = "tool"
+    UI = "ui"
 
 class AppRegistryImpl(AppRegistry):
     def register(self, app: App) -> None:
