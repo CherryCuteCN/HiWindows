@@ -15,7 +15,7 @@ def _frontend_url() -> str:
         return configured_url
 
     dist_index = (
-        Path(__file__).resolve().parents[4] / "frontend" / "dist" / "index.html"
+        Path(__file__).resolve().parents[3] / "frontend" / "dist" / "index.html"
     )
     if dist_index.exists():
         return f"file://{quote(str(dist_index))}"

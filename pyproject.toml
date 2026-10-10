@@ -5,12 +5,12 @@ description = "A tools can give you a SIMPLE WINDOWS"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "hiwindows-hook",
     "hiwindows-core",
+    "pywebview>=5.4",
 ]
 
 [project.scripts]
-hiwindows = "hook.app:main"
+hiwindows = "hiwindows_tools.hook.app:main"
 lint = "hiwindows_tools.lint:main"
 
 [dependency-groups]
@@ -23,12 +23,10 @@ dev = [
 default-groups = ["dev"]
 
 [tool.uv.sources]
-hiwindows-hook = { workspace = true }
 hiwindows-core = { workspace = true }
 
 [tool.uv.workspace]
 members = [
-    "packages/hook",
     "packages/core",
 ]
 
