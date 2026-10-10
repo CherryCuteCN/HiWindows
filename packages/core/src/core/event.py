@@ -1,7 +1,6 @@
 """事件管理"""
 
 from .models.event import Event, EventManager
-from .models.app import App, AppRegistry
 from enum import Enum
 
 class EventType(Enum):
