@@ -1,7 +1,7 @@
 [project]
 name = "hiwindows-core"
 version = "0.1.0"
-description = "Core package for HiWindows."
+description = "Core/Runtime package for HiWindows."
 requires-python = ">=3.14"
 dependencies = []
 
