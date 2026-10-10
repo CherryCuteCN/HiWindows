@@ -2,11 +2,12 @@
 
 from abc import ABC, abstractmethod
 
+
 class Event(ABC):
     """事件接口。"""
 
     @abstractmethod
-    def event(self):
+    def event(self) -> object:
         """获取事件类型。"""
         ...
 
