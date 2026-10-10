@@ -5,7 +5,7 @@ from enum import Enum
 
 class AppType(Enum):
     """应用类型。"""
-    pass
+    TOOL = "tool"
 
 class AppRegistryImpl(AppRegistry):
     def register(self, app: App) -> None:
