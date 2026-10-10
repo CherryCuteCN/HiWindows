@@ -2,6 +2,8 @@
 
 frontend/node_modules/
 node_modules
+frontend/auto-imports.d.ts
+frontend/components.d.ts
 frontend/dist/
 .pnpm-store
 # Byte-compiled / optimized / DLL files

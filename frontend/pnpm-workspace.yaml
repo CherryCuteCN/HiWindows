@@ -1,6 +1,7 @@
 allowBuilds:
   esbuild: true
   unrs-resolver: false
+  vue-demi: set this to true or false
 
 packages:
   - packages/*

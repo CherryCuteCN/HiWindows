@@ -7,9 +7,13 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
-    }
+    },
+    "./styles.css": "./src/styles.css"
   },
   "peerDependencies": {
     "vue": "^3.5.0"
+  },
+  "dependencies": {
+    "@nuxt/ui": "^4.11.3"
   }
 }
