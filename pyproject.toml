@@ -5,12 +5,12 @@ description = "A tools can give you a SIMPLE WINDOWS"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "hiwindows-bridge",
+    "hiwindows-hook",
     "hiwindows-core",
 ]
 
 [project.scripts]
-hiwindows = "bridge.app:main"
+hiwindows = "hook.app:main"
 lint = "hiwindows_tools.lint:main"
 
 [dependency-groups]
@@ -23,12 +23,12 @@ dev = [
 default-groups = ["dev"]
 
 [tool.uv.sources]
-hiwindows-bridge = { workspace = true }
+hiwindows-hook = { workspace = true }
 hiwindows-core = { workspace = true }
 
 [tool.uv.workspace]
 members = [
-    "packages/bridge",
+    "packages/hook",
     "packages/core",
 ]
 
@@ -55,3 +55,5 @@ include = ["main.py", "src", "packages"]
 exclude = ["frontend/node_modules", "frontend/dist"]
 typeCheckingMode = "standard"
 pythonVersion = "3.14"
+venvPath = "."
+venv = ".venv"

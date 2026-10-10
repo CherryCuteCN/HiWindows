@@ -5,8 +5,8 @@ requires-python = ">=3.14"
 [manifest]
 members = [
     "hiwindows",
-    "hiwindows-bridge",
     "hiwindows-core",
+    "hiwindows-hook",
 ]
 
 [[package]]
@@ -74,8 +74,8 @@ name = "hiwindows"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "hiwindows-bridge" },
     { name = "hiwindows-core" },
+    { name = "hiwindows-hook" },
 ]
 
 [package.dev-dependencies]
@@ -86,8 +86,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "hiwindows-bridge", editable = "packages/bridge" },
     { name = "hiwindows-core", editable = "packages/core" },
+    { name = "hiwindows-hook", editable = "packages/hook" },
 ]
 
 [package.metadata.requires-dev]
@@ -97,20 +97,20 @@ dev = [
 ]
 
 [[package]]
-name = "hiwindows-bridge"
+name = "hiwindows-core"
 version = "0.1.0"
-source = { editable = "packages/bridge" }
+source = { editable = "packages/core" }
+
+[[package]]
+name = "hiwindows-hook"
+version = "0.1.0"
+source = { editable = "packages/hook" }
 dependencies = [
     { name = "pywebview" },
 ]
 
 [package.metadata]
 requires-dist = [{ name = "pywebview", specifier = ">=5.4" }]
-
-[[package]]
-name = "hiwindows-core"
-version = "0.1.0"
-source = { editable = "packages/core" }
 
 [[package]]
 name = "nodejs-wheel-binaries"
