@@ -4,4 +4,54 @@ version = "0.1.0"
 description = "A tools can give you a SIMPLE WINDOWS"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "hiwindows-bridge",
+    "hiwindows-core",
+]
+
+[project.scripts]
+hiwindows = "bridge.app:main"
+lint = "hiwindows_tools.lint:main"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.31.0",
+    "ruff>=0.12.0",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.sources]
+hiwindows-bridge = { workspace = true }
+hiwindows-core = { workspace = true }
+
+[tool.uv.workspace]
+members = [
+    "packages/bridge",
+    "packages/core",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hiwindows_tools"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+src = ["src", "packages/*/src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.basedpyright]
+include = ["main.py", "src", "packages"]
+exclude = ["frontend/node_modules", "frontend/dist"]
+typeCheckingMode = "standard"
+pythonVersion = "3.14"
