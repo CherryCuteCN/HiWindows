@@ -1,0 +1,15 @@
+{
+  "name": "@hiwindows/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  }
+}
