@@ -1,0 +1,7 @@
+[project]
+name = "hiwindows"
+version = "0.1.0"
+description = "A tools can give you a SIMPLE WINDOWS"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
