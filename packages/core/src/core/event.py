@@ -1,7 +1,9 @@
 """事件管理"""
 
-from .models.event import Event, EventManager
 from enum import Enum
+
+from .models.event import Event, EventManager
+
 
 class EventType(Enum):
     """事件类型。"""
