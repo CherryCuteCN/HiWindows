@@ -1,12 +1,10 @@
-"""注册表抽象接口与数据模型。"""
+"""注册表端口与数据模型。"""
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
-
-from .backend import IOBackend
+from typing import Protocol, runtime_checkable
 
 
 class RegistryHive(StrEnum):
@@ -42,20 +40,21 @@ class RegistryValue:
     value_type: RegistryValueType | int
 
 
-class Registry(IOBackend, ABC):
-    """注册表操作契约。"""
+@runtime_checkable
+class Registry(Protocol):
+    """注册表操作端口。
 
-    @abstractmethod
+    具体实现通过结构化类型满足这个端口，不需要继承它。
+    """
+
     def key_exists(self, hive: RegistryHive, key_path: str) -> bool:
         """判断注册表键是否存在。"""
         ...
 
-    @abstractmethod
     def create_key(self, hive: RegistryHive, key_path: str) -> None:
         """创建注册表键及其父键。"""
         ...
 
-    @abstractmethod
     def delete_key(
         self,
         hive: RegistryHive,
@@ -66,7 +65,6 @@ class Registry(IOBackend, ABC):
         """删除注册表键。"""
         ...
 
-    @abstractmethod
     def read_value(
         self,
         hive: RegistryHive,
@@ -78,7 +76,6 @@ class Registry(IOBackend, ABC):
         """读取值；键或值不存在时返回 ``default``。"""
         ...
 
-    @abstractmethod
     def write_value(
         self,
         hive: RegistryHive,
@@ -91,7 +88,6 @@ class Registry(IOBackend, ABC):
         """写入值；键不存在时自动创建。"""
         ...
 
-    @abstractmethod
     def delete_value(
         self,
         hive: RegistryHive,
@@ -101,12 +97,10 @@ class Registry(IOBackend, ABC):
         """删除值。"""
         ...
 
-    @abstractmethod
     def list_subkeys(self, hive: RegistryHive, key_path: str) -> tuple[str, ...]:
         """列出键的直接子键。"""
         ...
 
-    @abstractmethod
     def list_values(
         self,
         hive: RegistryHive,

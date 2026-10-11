@@ -1,7 +1,7 @@
-"""应用模型与注册接口。"""
+"""应用模型与生命周期端口。"""
 
-from abc import ABC, abstractmethod
 from enum import Enum
+from typing import Protocol
 
 
 class AppType(Enum):
@@ -9,15 +9,13 @@ class AppType(Enum):
     TOOL = "tool"
     UI = "ui"
 
-class App(ABC):
-    """应用生命周期接口。"""
+class App(Protocol):
+    """应用生命周期端口。"""
 
-    @abstractmethod
     def run(self, app_type: AppType) -> None:
         """启动应用。"""
         ...
 
-    @abstractmethod
     def stop(self, app_type: AppType) -> None:
         """停止应用。"""
         ...

@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from core.models.event import Event
-
 
 class IOEventType(StrEnum):
     """I/O 操作事件类型。"""
@@ -16,7 +14,7 @@ class IOEventType(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class IOEvent(Event):
+class IOEvent:
     """一次 I/O 操作的结果事件。"""
 
     event_type: IOEventType
@@ -24,7 +22,3 @@ class IOEvent(Event):
     target: str
     succeeded: bool
     error_type: str | None = None
-
-    def event(self) -> IOEventType:
-        """获取事件类型。"""
-        return self.event_type

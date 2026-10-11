@@ -1,4 +1,4 @@
-"""I/O 后端的公共能力。"""
+"""I/O 后端的共享运行能力。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,10 @@ from .events import IOEvent, IOEventType
 
 
 class IOBackend:
-    """可向 Core 事件系统报告操作结果的 I/O 后端。"""
+    """为具体 I/O 实现提供操作结果报告能力。
+
+    这是共享实现，不是需要被业务依赖的抽象接口。
+    """
 
     def __init__(self, event_publisher: EventPublisher | None = None) -> None:
         self._event_publisher = event_publisher
@@ -28,7 +31,7 @@ class IOBackend:
         """发布一次 I/O 操作结果。"""
         if self._event_publisher is None:
             return
-        self._event_publisher.publish_event(
+        self._event_publisher.publish(
             IOEvent(
                 event_type=event_type,
                 operation=operation,

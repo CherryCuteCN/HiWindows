@@ -8,9 +8,9 @@ from typing import Any
 from core.models.event import EventPublisher
 
 from .exceptions import BackendUnavailableError
+from .models.backend import IOBackend
 from .models.events import IOEventType
 from .models.registry import (
-    Registry,
     RegistryHive,
     RegistryValue,
     RegistryValueType,
@@ -32,7 +32,7 @@ def _is_missing_error(error: BaseException) -> bool:
     return getattr(error, "winerror", None) in {2, 3}
 
 
-class PyWin32Registry(Registry):
+class PyWin32Registry(IOBackend):
     """使用 ``pywin32.win32api`` 的注册表实现。"""
 
     def __init__(self, event_publisher: EventPublisher | None = None) -> None:

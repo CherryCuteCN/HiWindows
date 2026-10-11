@@ -10,11 +10,45 @@ from typing import Any
 from core.models.event import EventPublisher
 
 from .exceptions import BackendUnavailableError
+from .models.backend import IOBackend
 from .models.events import IOEventType
-from .models.filesystem import FileSystem, PathLike
+from .models.filesystem import PathLike
 
 
-class PathFileSystem(FileSystem):
+class _FileSystemBackend(IOBackend):
+    """文件系统实现共享的非抽象能力。"""
+
+    def read_bytes(self, path: PathLike) -> bytes:
+        """读取文件的原始字节，由具体实现提供。"""
+        raise NotImplementedError
+
+    def write_bytes(self, path: PathLike, data: bytes) -> None:
+        """写入文件的原始字节，由具体实现提供。"""
+        raise NotImplementedError
+
+    def read_text(
+        self,
+        path: PathLike,
+        *,
+        encoding: str = "utf-8",
+        errors: str = "strict",
+    ) -> str:
+        """按指定编码读取文本文件。"""
+        return self.read_bytes(path).decode(encoding, errors)
+
+    def write_text(
+        self,
+        path: PathLike,
+        data: str,
+        *,
+        encoding: str = "utf-8",
+        errors: str = "strict",
+    ) -> None:
+        """按指定编码覆盖写入文本文件。"""
+        self.write_bytes(path, data.encode(encoding, errors))
+
+
+class PathFileSystem(_FileSystemBackend):
     """基于 Python 标准库的文件系统实现。
 
     该实现用于跨平台测试和不需要 Windows 特有语义的场景。
@@ -109,7 +143,7 @@ def _load_pywin32_file_module() -> Any:
         ) from error
 
 
-class PyWin32FileSystem(FileSystem):
+class PyWin32FileSystem(_FileSystemBackend):
     """使用 ``pywin32.win32file`` 的 Windows 文件系统实现。"""
 
     def __init__(
