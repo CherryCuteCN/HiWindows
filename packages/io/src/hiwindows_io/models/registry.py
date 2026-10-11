@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 
+from .backend import IOBackend
+
 
 class RegistryHive(StrEnum):
     """注册表根键。"""
@@ -40,7 +42,7 @@ class RegistryValue:
     value_type: RegistryValueType | int
 
 
-class Registry(ABC):
+class Registry(IOBackend, ABC):
     """注册表操作契约。"""
 
     @abstractmethod

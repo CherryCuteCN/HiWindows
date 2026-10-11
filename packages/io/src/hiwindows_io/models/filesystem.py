@@ -6,10 +6,12 @@ import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from .backend import IOBackend
+
 type PathLike = str | os.PathLike[str]
 
 
-class FileSystem(ABC):
+class FileSystem(IOBackend, ABC):
     """文件系统操作契约。"""
 
     @abstractmethod

@@ -12,6 +12,9 @@ from .filesystem import (
 )
 from .models import (
     FileSystem,
+    IOBackend,
+    IOEvent,
+    IOEventType,
     PathLike,
     Registry,
     RegistryHive,
@@ -26,6 +29,9 @@ from .registry import (
 __all__ = [
     "BackendUnavailableError",
     "FileSystem",
+    "IOBackend",
+    "IOEvent",
+    "IOEventType",
     "PathFileSystem",
     "PathLike",
     "PyWin32FileSystem",
