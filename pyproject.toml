@@ -7,6 +7,7 @@ requires-python = ">=3.14"
 dependencies = [
     "hiwindows-core",
     "hiwindows-io",
+    "hiwindows-software-manager",
     "pywebview>=5.4",
 ]
 
@@ -26,11 +27,13 @@ default-groups = ["dev"]
 [tool.uv.sources]
 hiwindows-core = { workspace = true }
 hiwindows-io = { workspace = true }
+hiwindows-software-manager = { workspace = true }
 
 [tool.uv.workspace]
 members = [
     "packages/core",
     "packages/io",
+    "packages/software-manager",
 ]
 
 [build-system]

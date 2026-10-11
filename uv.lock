@@ -7,6 +7,7 @@ members = [
     "hiwindows",
     "hiwindows-core",
     "hiwindows-io",
+    "hiwindows-software-manager",
 ]
 
 [[package]]
@@ -76,6 +77,7 @@ source = { editable = "." }
 dependencies = [
     { name = "hiwindows-core" },
     { name = "hiwindows-io" },
+    { name = "hiwindows-software-manager" },
     { name = "pywebview" },
 ]
 
@@ -89,6 +91,7 @@ dev = [
 requires-dist = [
     { name = "hiwindows-core", editable = "packages/core" },
     { name = "hiwindows-io", editable = "packages/io" },
+    { name = "hiwindows-software-manager", editable = "packages/software-manager" },
     { name = "pywebview", specifier = ">=5.4" },
 ]
 
@@ -117,6 +120,17 @@ requires-dist = [
     { name = "hiwindows-core", editable = "packages/core" },
     { name = "pywin32", marker = "sys_platform == 'win32'", specifier = ">=308" },
 ]
+
+[[package]]
+name = "hiwindows-software-manager"
+version = "0.1.0"
+source = { editable = "packages/software-manager" }
+dependencies = [
+    { name = "hiwindows-io" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "hiwindows-io", editable = "packages/io" }]
 
 [[package]]
 name = "nodejs-wheel-binaries"
