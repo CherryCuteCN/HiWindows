@@ -5,6 +5,7 @@ description = "Input/output package for HiWindows."
 requires-python = ">=3.14"
 dependencies = [
     "hiwindows-core",
+    "pywin32>=308; sys_platform == 'win32'",
 ]
 
 [build-system]
