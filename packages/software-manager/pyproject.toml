@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Software management package for HiWindows."
 requires-python = ">=3.14"
 dependencies = [
+    "hiwindows-core",
     "hiwindows-io",
     "pydantic>=2.0",
 ]

@@ -12,35 +12,54 @@ from .filesystem import (
 )
 from .models import (
     FileSystem,
+    FileSystemProgress,
+    FileSystemProgressCallback,
     IOBackend,
     IOEvent,
     IOEventType,
     PathLike,
+    ProcessResult,
+    ProcessRunner,
     Registry,
     RegistryHive,
     RegistryValue,
     RegistryValueType,
+    ShortcutInfo,
+    ShortcutResolver,
 )
+from .process import WindowsProcessRunner
 from .registry import (
     PyWin32Registry,
     WindowsRegistry,
 )
+from .shell import WindowsShellShortcutResolver, WindowsShortcutResolver
+from .windows import WindowsIO
 
 __all__ = [
     "BackendUnavailableError",
     "FileSystem",
+    "FileSystemProgress",
+    "FileSystemProgressCallback",
     "IOBackend",
     "IOEvent",
     "IOEventType",
     "PathFileSystem",
     "PathLike",
+    "ProcessResult",
+    "ProcessRunner",
     "PyWin32FileSystem",
     "PyWin32Registry",
     "Registry",
     "RegistryHive",
     "RegistryValue",
     "RegistryValueType",
+    "ShortcutInfo",
+    "ShortcutResolver",
     "WindowsFileSystem",
+    "WindowsIO",
     "WindowsIOError",
     "WindowsRegistry",
+    "WindowsProcessRunner",
+    "WindowsShortcutResolver",
+    "WindowsShellShortcutResolver",
 ]

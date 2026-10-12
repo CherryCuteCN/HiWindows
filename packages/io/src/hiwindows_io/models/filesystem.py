@@ -3,10 +3,23 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 type PathLike = str | os.PathLike[str]
+type FileSystemProgressCallback = Callable[["FileSystemProgress"], None]
+
+
+@dataclass(frozen=True, slots=True)
+class FileSystemProgress:
+    """文件系统批量操作的进度。"""
+
+    operation: str
+    current_path: Path
+    completed_items: int
+    total_items: int
 
 
 @runtime_checkable
@@ -20,6 +33,14 @@ class FileSystem(Protocol):
         """判断路径是否存在。"""
         ...
 
+    def is_file(self, path: PathLike) -> bool:
+        """判断路径是否为文件。"""
+        ...
+
+    def is_dir(self, path: PathLike) -> bool:
+        """判断路径是否为目录。"""
+        ...
+
     def read_bytes(self, path: PathLike) -> bytes:
         """读取文件的原始字节。"""
         ...
@@ -30,6 +51,19 @@ class FileSystem(Protocol):
 
     def remove_file(self, path: PathLike) -> None:
         """删除文件。"""
+        ...
+
+    def remove_dir(self, path: PathLike) -> None:
+        """删除空目录。"""
+        ...
+
+    def remove_tree(
+        self,
+        path: PathLike,
+        *,
+        on_progress: FileSystemProgressCallback | None = None,
+    ) -> None:
+        """递归删除目录，并在删除每个项目后报告进度。"""
         ...
 
     def make_dir(self, path: PathLike, *, parents: bool = False) -> None:

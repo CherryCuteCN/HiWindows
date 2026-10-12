@@ -1,10 +1,11 @@
 """Windows 应用卸载记录模型。"""
 
 from enum import StrEnum
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from hiwindows_io.models import RegistryHive
+from hiwindows_io import RegistryHive
 
 
 class ApplicationType(StrEnum):
@@ -15,6 +16,64 @@ class ApplicationType(StrEnum):
     APPX = "appx"
     PORTABLE = "portable"
     UNKNOWN = "unknown"
+
+
+class UninstallPhase(StrEnum):
+    """卸载过程阶段。"""
+
+    INSPECTING = "inspecting"
+    RUNNING_UNINSTALLER = "running_uninstaller"
+    REMOVING_FILES = "removing_files"
+    REMOVING_REGISTRY = "removing_registry"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class UninstallProgress(BaseModel):
+    """卸载过程中的实时进度事件。"""
+
+    phase: UninstallPhase
+    progress: float = Field(ge=0, le=100, description="整体完成百分比")
+    current_directory: str | None = Field(
+        default=None,
+        description="当前正在处理的目录",
+    )
+    current_path: str | None = Field(
+        default=None,
+        description="当前正在处理的文件或注册表路径",
+    )
+    completed_items: int = Field(default=0, ge=0, description="已处理项目数")
+    total_items: int = Field(default=0, ge=0, description="待处理项目数")
+    message: str = Field(default="", description="面向用户的进度说明")
+    succeeded: bool = True
+    error: str | None = None
+
+    @classmethod
+    def for_path(
+        cls,
+        *,
+        phase: UninstallPhase,
+        path: Path | str,
+        completed_items: int,
+        total_items: int,
+        message: str,
+    ) -> "UninstallProgress":
+        """从文件路径构造进度事件。"""
+        path_object = Path(path)
+        progress = (
+            100.0
+            if total_items == 0
+            else min(100.0, completed_items / total_items * 100)
+        )
+        return cls(
+            phase=phase,
+            progress=progress,
+            current_directory=str(path_object.parent),
+            current_path=str(path_object),
+            completed_items=completed_items,
+            total_items=total_items,
+            message=message,
+        )
 
 
 class RegistryLocation(BaseModel):

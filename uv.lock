@@ -135,12 +135,14 @@ name = "hiwindows-software-manager"
 version = "0.1.0"
 source = { editable = "packages/software-manager" }
 dependencies = [
+    { name = "hiwindows-core" },
     { name = "hiwindows-io" },
     { name = "pydantic" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "hiwindows-core", editable = "packages/core" },
     { name = "hiwindows-io", editable = "packages/io" },
     { name = "pydantic", specifier = ">=2.0" },
 ]

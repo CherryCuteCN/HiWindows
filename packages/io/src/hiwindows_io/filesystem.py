@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import stat
 from importlib import import_module
 from pathlib import Path
 from typing import Any
@@ -12,10 +13,15 @@ from core.models.event import EventPublisher
 from .exceptions import BackendUnavailableError
 from .models.backend import IOBackend
 from .models.events import IOEventType
-from .models.filesystem import PathLike
+from .models.filesystem import (
+    FileSystem,
+    FileSystemProgress,
+    FileSystemProgressCallback,
+    PathLike,
+)
 
 
-class _FileSystemBackend(IOBackend):
+class _FileSystemBackend(IOBackend, FileSystem):
     """文件系统实现共享的非抽象能力。"""
 
     def read_bytes(self, path: PathLike) -> bytes:
@@ -47,6 +53,51 @@ class _FileSystemBackend(IOBackend):
         """按指定编码覆盖写入文本文件。"""
         self.write_bytes(path, data.encode(encoding, errors))
 
+    def remove_tree(
+        self,
+        path: PathLike,
+        *,
+        on_progress: FileSystemProgressCallback | None = None,
+    ) -> None:
+        """递归删除路径，并按删除项目逐项报告进度。"""
+        root = Path(path)
+        if not self.exists(root):
+            return
+
+        total_items = self._count_tree(root)
+        completed_items = 0
+
+        def remove(current_path: Path) -> None:
+            nonlocal completed_items
+            if self.is_dir(current_path):
+                for child in self.list_dir(current_path):
+                    remove(child)
+                self.remove_dir(current_path)
+            else:
+                self.remove_file(current_path)
+            completed_items += 1
+            if on_progress is not None:
+                on_progress(
+                    FileSystemProgress(
+                        operation="remove_tree",
+                        current_path=current_path,
+                        completed_items=completed_items,
+                        total_items=total_items,
+                    )
+                )
+
+        with self._operation(
+            IOEventType.FILESYSTEM_OPERATION,
+            "remove_tree",
+            str(root),
+        ):
+            remove(root)
+
+    def _count_tree(self, path: Path) -> int:
+        if not self.is_dir(path):
+            return 1
+        return 1 + sum(self._count_tree(child) for child in self.list_dir(path))
+
 
 class PathFileSystem(_FileSystemBackend):
     """基于 Python 标准库的文件系统实现。
@@ -57,6 +108,15 @@ class PathFileSystem(_FileSystemBackend):
     def exists(self, path: PathLike) -> bool:
         with self._operation(IOEventType.FILESYSTEM_OPERATION, "exists", str(path)):
             return Path(path).exists()
+
+    def is_file(self, path: PathLike) -> bool:
+        with self._operation(IOEventType.FILESYSTEM_OPERATION, "is_file", str(path)):
+            return Path(path).is_file()
+
+    def is_dir(self, path: PathLike) -> bool:
+        with self._operation(IOEventType.FILESYSTEM_OPERATION, "is_dir", str(path)):
+            path_object = Path(path)
+            return path_object.is_dir() and not path_object.is_symlink()
 
     def read_bytes(self, path: PathLike) -> bytes:
         with self._operation(
@@ -80,7 +140,19 @@ class PathFileSystem(_FileSystemBackend):
             "remove_file",
             str(path),
         ):
-            Path(path).unlink()
+            path_object = Path(path)
+            path_object.chmod(path_object.stat().st_mode | stat.S_IWRITE)
+            path_object.unlink()
+
+    def remove_dir(self, path: PathLike) -> None:
+        with self._operation(
+            IOEventType.FILESYSTEM_OPERATION,
+            "remove_dir",
+            str(path),
+        ):
+            path_object = Path(path)
+            path_object.chmod(path_object.stat().st_mode | stat.S_IWRITE)
+            path_object.rmdir()
 
     def make_dir(self, path: PathLike, *, parents: bool = False) -> None:
         with self._operation(
@@ -166,6 +238,15 @@ class PyWin32FileSystem(_FileSystemBackend):
                 return False
             return True
 
+    def is_file(self, path: PathLike) -> bool:
+        with self._operation(IOEventType.FILESYSTEM_OPERATION, "is_file", str(path)):
+            return Path(path).is_file()
+
+    def is_dir(self, path: PathLike) -> bool:
+        with self._operation(IOEventType.FILESYSTEM_OPERATION, "is_dir", str(path)):
+            path_object = Path(path)
+            return path_object.is_dir() and not path_object.is_symlink()
+
     def read_bytes(self, path: PathLike) -> bytes:
         with self._operation(
             IOEventType.FILESYSTEM_OPERATION,
@@ -229,7 +310,17 @@ class PyWin32FileSystem(_FileSystemBackend):
             "remove_file",
             str(path),
         ):
+            Path(path).chmod(Path(path).stat().st_mode | stat.S_IWRITE)
             self._win32file.DeleteFile(str(path))
+
+    def remove_dir(self, path: PathLike) -> None:
+        with self._operation(
+            IOEventType.FILESYSTEM_OPERATION,
+            "remove_dir",
+            str(path),
+        ):
+            Path(path).chmod(Path(path).stat().st_mode | stat.S_IWRITE)
+            self._win32file.RemoveDirectory(str(path))
 
     def make_dir(self, path: PathLike, *, parents: bool = False) -> None:
         with self._operation(
