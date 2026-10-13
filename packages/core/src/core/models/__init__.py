@@ -1,6 +1,6 @@
-"""模型模块"""
+"""模型模块。"""
 
-from .app import App, AppType
+from .app import App, AppMode, AppType, ModeAwareApp
 from .event import (
     Event,
     EventHandler,
@@ -11,10 +11,12 @@ from .event import (
 
 __all__ = [
     "App",
+    "AppMode",
     "AppType",
     "Event",
     "EventHandler",
     "EventManager",
     "EventPublisher",
     "Subscription",
+    "ModeAwareApp",
 ]

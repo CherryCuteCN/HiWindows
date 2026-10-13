@@ -6,6 +6,7 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 
+from core import AppType, ModeAwareApp
 from core.models.event import EventPublisher
 from hiwindows_io import (
     FileSystem,
@@ -21,10 +22,17 @@ from hiwindows_io import (
 from .models.events import UninstallProgressEvent
 from .models.uninstall import (
     ApplicationType,
+    CleanupItem,
+    CleanupItemType,
+    CleanupRisk,
+    IndexedApplication,
     RegistryLocation,
     Uninstall,
     UninstallCommand,
+    UninstallMethod,
+    UninstallMode,
     UninstallPhase,
+    UninstallPlan,
     UninstallProgress,
     UninstallRegistryRecord,
 )
@@ -45,13 +53,15 @@ _UNINSTALL_REGISTRY_PATHS = (
 )
 
 
-class SoftwareUninstaller:
+class SoftwareUninstaller(ModeAwareApp):
     """可替换 Windows I/O 后端的应用卸载编排器。
 
     ``uninstall`` 是同步生成器：调用方可以在每个文件、目录或注册表项
     处理完成后立即拿到一个 ``UninstallProgress``，适合直接接 UI 或 RPC
     的流式响应。
     """
+
+    supports_managed_modes = True
 
     def __init__(
         self,
@@ -67,6 +77,120 @@ class SoftwareUninstaller:
         self._registry = registry
         self._process_runner = process_runner
         self._event_publisher = event_publisher
+        self._indexed_applications: tuple[IndexedApplication, ...] = ()
+
+    def run(self, app_type: AppType) -> None:
+        """启动软件管理组件。
+
+        卸载器本身不需要常驻进程；该方法保留给 core App 生命周期管理。
+        """
+
+    def stop(self, app_type: AppType) -> None:
+        """停止软件管理组件。"""
+
+    def modes(self) -> tuple[str, ...]:
+        """返回软件管理器自己定义的两种卸载模式。"""
+        return (UninstallMode.STANDARD, UninstallMode.SIMPLE)
+
+    def run_mode(self, mode: str, request: object | None = None) -> object:
+        """按软件管理器定义的模式执行卸载请求。"""
+        selected_item_ids: set[str] | None = None
+        reference = request
+        method: object = UninstallMethod.APPLICATION
+        if isinstance(request, dict):
+            reference = request.get("reference")
+            method = request.get("method", UninstallMethod.APPLICATION)
+            selected = request.get("selected_item_ids")
+            if selected is not None:
+                if not isinstance(selected, (list, set, tuple)) or not all(
+                    isinstance(item, str) for item in selected
+                ):
+                    raise TypeError("selected_item_ids 必须是字符串序列")
+                selected_item_ids = set(selected)
+        if not isinstance(reference, (str, os.PathLike)):
+            raise TypeError("软件卸载模式需要快捷方式路径或索引 ID")
+        try:
+            uninstall_mode = UninstallMode(mode)
+        except ValueError as error:
+            raise ValueError(f"不支持的软件卸载模式: {mode}") from error
+        try:
+            uninstall_method = UninstallMethod(method)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"不支持的软件卸载方式: {method}") from error
+        return self.uninstall(
+            reference,
+            mode=uninstall_mode,
+            method=uninstall_method,
+            selected_item_ids=selected_item_ids,
+        )
+
+    def refresh_index(self) -> tuple[IndexedApplication, ...]:
+        """刷新应用快速索引；同名候选会保留为独立记录。"""
+        indexed: list[IndexedApplication] = []
+        for record in self._all_registry_records():
+            if not record.display_name:
+                continue
+            indexed.append(
+                IndexedApplication(
+                    application_id=f"registry:{record.hive.value}:{record.path}",
+                    name=record.display_name,
+                    application_type=(
+                        ApplicationType.MSI
+                        if record.windows_installer
+                        else ApplicationType.WIN32
+                    ),
+                    publisher=record.publisher,
+                    version=record.display_version,
+                    install_location=record.install_location,
+                    source="uninstall_registry",
+                    evidence=[f"{record.hive.value}\\{record.path}"],
+                )
+            )
+
+        for root in self._shortcut_roots():
+            for shortcut_path in self._iter_files(root):
+                if shortcut_path.suffix.lower() != ".lnk":
+                    continue
+                try:
+                    shortcut = self._shortcut_resolver.resolve(shortcut_path)
+                except (OSError, ValueError):
+                    continue
+                indexed.append(
+                    IndexedApplication(
+                        application_id=f"shortcut:{self._path_key(shortcut.path)}",
+                        name=shortcut.path.stem,
+                        application_type=ApplicationType.PORTABLE,
+                        install_location=str(shortcut.target_path.parent),
+                        executable_paths=[str(shortcut.target_path)],
+                        entry_path=str(shortcut.path),
+                        source="shortcut",
+                        evidence=[f"shortcut:{shortcut.path}"],
+                    )
+                )
+
+        self._indexed_applications = tuple(indexed)
+        return self._indexed_applications
+
+    def search(self, query: str) -> tuple[IndexedApplication, ...]:
+        """在快速索引中按名称、发布者或路径搜索应用。"""
+        normalized_query = query.strip().casefold()
+        if not normalized_query:
+            return ()
+        if not self._indexed_applications:
+            self.refresh_index()
+        return tuple(
+            application
+            for application in self._indexed_applications
+            if normalized_query in " ".join(
+                value.casefold()
+                for value in (
+                    application.name,
+                    application.publisher or "",
+                    application.install_location or "",
+                    *application.executable_paths,
+                )
+            )
+        )
 
     def inspect(self, shortcut_path: PathLike) -> Uninstall:
         """从快捷方式解析应用，并收集可清理的快捷方式、命令和注册表项。"""
@@ -136,41 +260,233 @@ class SoftwareUninstaller:
             uninstall_registry_records=registry_records,
         )
 
-    def uninstall(self, shortcut_path: PathLike) -> Iterator[UninstallProgress]:
-        """卸载应用并同时向 core 事件总线发布进度。"""
-        for progress in self._uninstall(shortcut_path):
-            if self._event_publisher is not None:
-                self._event_publisher.publish(UninstallProgressEvent(progress))
-            yield progress
+    def create_plan(
+        self,
+        shortcut_path: PathLike,
+        *,
+        mode: UninstallMode = UninstallMode.STANDARD,
+    ) -> UninstallPlan:
+        """生成可预览的卸载计划，不执行任何破坏性操作。"""
+        uninstall = self._inspect_reference(shortcut_path)
+        system_component = any(
+            record.system_component for record in uninstall.uninstall_registry_records
+        )
+        items: list[CleanupItem] = []
 
-    def _uninstall(self, shortcut_path: PathLike) -> Iterator[UninstallProgress]:
-        """卸载快捷方式对应的应用，并实时返回清理进度。"""
-        uninstall = self.inspect(shortcut_path)
-        yield UninstallProgress(
-            phase=UninstallPhase.INSPECTING,
-            progress=0,
-            current_directory=str(Path(uninstall.id).parent),
-            current_path=uninstall.id,
-            message="已识别应用，准备清理",
+        for index, path in enumerate(self._cleanup_paths(uninstall)):
+            path_object = Path(path)
+            is_install_dir = self._path_key(path_object) == self._path_key(
+                Path(uninstall.dir)
+            )
+            items.append(
+                CleanupItem(
+                    id=f"path:{index}",
+                    item_type=(
+                        CleanupItemType.DIRECTORY
+                        if self._filesystem.is_dir(path_object)
+                        else CleanupItemType.FILE
+                    ),
+                    target=str(path_object),
+                    description=(
+                        "清理应用安装目录"
+                        if is_install_dir
+                        else "清理应用关联文件或快捷方式"
+                    ),
+                    risk=CleanupRisk.HIGH if is_install_dir else CleanupRisk.LOW,
+                    evidence=["shortcut-target", "install-location"]
+                    if is_install_dir
+                    else ["related-shortcut"],
+                    allowed_in_simple=not system_component,
+                )
+            )
+
+        for index, location in enumerate(uninstall.registry_keys):
+            items.append(
+                CleanupItem(
+                    id=f"registry:{index}",
+                    item_type=CleanupItemType.REGISTRY,
+                    target=f"{location.hive.value}\\{location.path}",
+                    description="清理应用注册表项",
+                    risk=CleanupRisk.HIGH
+                    if system_component
+                    else CleanupRisk.MEDIUM,
+                    evidence=[location.path],
+                    allowed_in_simple=not system_component,
+                )
+            )
+
+        return UninstallPlan(
+            application=uninstall,
+            mode=mode,
+            available_methods=[
+                UninstallMethod.APPLICATION,
+                *(
+                    [UninstallMethod.OFFICIAL]
+                    if uninstall.uninstall_commands
+                    else []
+                ),
+            ],
+            official_commands=uninstall.uninstall_commands,
+            items=items,
+            snapshot={
+                "application_id": uninstall.id,
+                "name": uninstall.name,
+                "directory": uninstall.dir,
+            },
         )
 
-        paths = self._cleanup_paths(uninstall)
-        total_items = sum(self._count_items(path) for path in paths)
-        total_items += len(uninstall.uninstall_commands)
-        total_items += self._registry_operation_count(uninstall)
+    def _inspect_reference(self, reference: PathLike) -> Uninstall:
+        """根据快捷方式路径或索引 ID 生成最新卸载信息。"""
+        reference_text = str(reference)
+        if not reference_text.startswith(("registry:", "shortcut:")):
+            return self.inspect(reference)
+
+        if not self._indexed_applications:
+            self.refresh_index()
+        indexed = next(
+            (
+                application
+                for application in self._indexed_applications
+                if application.application_id == reference_text
+            ),
+            None,
+        )
+        if indexed is None:
+            raise ValueError(f"索引中不存在应用: {reference_text}")
+        if indexed.entry_path is not None:
+            return self.inspect(indexed.entry_path)
+
+        record = next(
+            (
+                record
+                for record in self._all_registry_records()
+                if (
+                    f"registry:{record.hive.value}:{record.path}"
+                    == reference_text
+                )
+            ),
+            None,
+        )
+        if record is None:
+            raise ValueError(f"应用索引已失效: {reference_text}")
+        return self._uninstall_from_registry_record(reference_text, record)
+
+    def _uninstall_from_registry_record(
+        self,
+        application_id: str,
+        record: UninstallRegistryRecord,
+    ) -> Uninstall:
+        """把没有快捷方式入口的注册表应用转换为卸载信息。"""
+        install_dir = record.install_location
+        if not install_dir and record.display_icon:
+            install_dir = str(Path(record.display_icon.split(",", 1)[0]).parent)
+        install_dir = install_dir or "<unknown-install-location>"
+        return Uninstall(
+            id=application_id,
+            name=record.display_name or application_id,
+            dir=install_dir,
+            application_type=(
+                ApplicationType.MSI
+                if record.windows_installer
+                else ApplicationType.WIN32
+            ),
+            publisher=record.publisher,
+            version=record.display_version,
+            executable_paths=[record.display_icon]
+            if record.display_icon
+            else [],
+            uninstall_commands=self._commands_from_records([record]),
+            registry_keys=[
+                RegistryLocation(
+                    hive=record.hive,
+                    path=record.path,
+                    recursive=True,
+                )
+            ]
+            if not record.no_remove
+            else [],
+            uninstall_registry_records=[record],
+        )
+
+    def uninstall(
+        self,
+        shortcut_path: PathLike,
+        *,
+        mode: UninstallMode = UninstallMode.SIMPLE,
+        method: UninstallMethod = UninstallMethod.APPLICATION,
+        selected_item_ids: set[str] | None = None,
+    ) -> Iterator[UninstallProgress]:
+        """卸载应用并同时向 core 事件总线发布进度。"""
+        try:
+            method = UninstallMethod(method)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"不支持的软件卸载方式: {method}") from error
+        for progress in self._uninstall(
+            shortcut_path,
+            mode=mode,
+            method=method,
+            selected_item_ids=selected_item_ids,
+        ):
+            if self._event_publisher is not None:
+                self._event_publisher.publish(
+                    UninstallProgressEvent(progress=progress)
+                )
+            yield progress
+
+    def _uninstall_official(
+        self,
+        uninstall: Uninstall,
+    ) -> Iterator[UninstallProgress]:
+        """执行用户明确选择的官方卸载器，不再执行本应用清理。"""
+        commands = uninstall.uninstall_commands
+        total_items = len(commands)
         completed_items = 0
         errors: list[str] = []
 
-        for command in uninstall.uninstall_commands:
+        yield UninstallProgress(
+            phase=UninstallPhase.INSPECTING,
+            progress=0,
+            current_directory=uninstall.dir,
+            current_path=uninstall.id,
+            application_id=uninstall.id,
+            message="已检测到官方卸载器，准备按用户选择执行",
+        )
+
+        if not commands:
+            errors.append("未检测到官方卸载器")
+        elif self._process_runner is None:
+            errors.append("未配置进程执行后端，无法运行官方卸载器")
+
+        for command in commands:
+            if errors:
+                break
             yield self._progress(
                 phase=UninstallPhase.RUNNING_UNINSTALLER,
                 path=command.working_dir or uninstall.dir,
                 completed_items=completed_items,
                 total_items=total_items,
-                message=f"正在运行卸载程序: {command.command}",
+                message=f"正在运行官方卸载器: {command.command}",
             )
-            if self._process_runner is None:
-                error = "未配置进程执行后端，无法运行官方卸载程序"
+            try:
+                assert self._process_runner is not None
+                result = self._process_runner.run(
+                    command.command,
+                    working_dir=command.working_dir,
+                )
+            except Exception as error:
+                errors.append(str(error))
+                yield self._failed_progress(
+                    phase=UninstallPhase.RUNNING_UNINSTALLER,
+                    path=command.working_dir or uninstall.dir,
+                    completed_items=completed_items,
+                    total_items=total_items,
+                    error=str(error),
+                )
+                continue
+
+            completed_items += 1
+            if result.return_code != 0:
+                error = f"官方卸载器返回错误码 {result.return_code}"
                 errors.append(error)
                 yield self._failed_progress(
                     phase=UninstallPhase.RUNNING_UNINSTALLER,
@@ -179,41 +495,91 @@ class SoftwareUninstaller:
                     total_items=total_items,
                     error=error,
                 )
-                continue
-            try:
-                result = self._process_runner.run(
-                    command.command,
-                    working_dir=command.working_dir,
-                )
-                completed_items += 1
-                if result.return_code != 0:
-                    error = f"卸载程序返回错误码 {result.return_code}"
-                    errors.append(error)
-                    yield self._failed_progress(
-                        phase=UninstallPhase.RUNNING_UNINSTALLER,
-                        path=command.working_dir or uninstall.dir,
-                        completed_items=completed_items,
-                        total_items=total_items,
-                        error=error,
-                    )
-                else:
-                    yield self._progress(
-                        phase=UninstallPhase.RUNNING_UNINSTALLER,
-                        path=command.working_dir or uninstall.dir,
-                        completed_items=completed_items,
-                        total_items=total_items,
-                        message="官方卸载程序执行完成",
-                    )
-            except Exception as error:
-                errors.append(str(error))
-                completed_items += 1
-                yield self._failed_progress(
+            else:
+                yield self._progress(
                     phase=UninstallPhase.RUNNING_UNINSTALLER,
                     path=command.working_dir or uninstall.dir,
                     completed_items=completed_items,
                     total_items=total_items,
-                    error=str(error),
+                    message="官方卸载器执行完成",
                 )
+
+        if errors:
+            yield UninstallProgress(
+                phase=UninstallPhase.FAILED,
+                progress=100,
+                current_directory=uninstall.dir,
+                application_id=uninstall.id,
+                completed_items=completed_items,
+                total_items=total_items,
+                message="官方卸载器执行失败",
+                succeeded=False,
+                error="; ".join(errors),
+            )
+        else:
+            yield UninstallProgress(
+                phase=UninstallPhase.COMPLETED,
+                progress=100,
+                current_directory=uninstall.dir,
+                application_id=uninstall.id,
+                completed_items=completed_items,
+                total_items=total_items,
+                message="官方卸载器执行完成，未执行本应用的额外清理",
+            )
+
+    def _uninstall(
+        self,
+        shortcut_path: PathLike,
+        *,
+        mode: UninstallMode,
+        method: UninstallMethod,
+        selected_item_ids: set[str] | None,
+    ) -> Iterator[UninstallProgress]:
+        """卸载快捷方式对应的应用，并实时返回清理进度。"""
+        plan = self.create_plan(shortcut_path, mode=mode)
+        uninstall = plan.application
+        if method is UninstallMethod.OFFICIAL:
+            yield from self._uninstall_official(uninstall)
+            return
+        selected_ids = (
+            selected_item_ids
+            if mode is UninstallMode.STANDARD and selected_item_ids is not None
+            else {
+                item.id
+                for item in plan.items
+                if (
+                    item.allowed_in_simple
+                    if mode is UninstallMode.SIMPLE
+                    else item.selected_by_default
+                )
+            }
+        )
+        yield UninstallProgress(
+            phase=UninstallPhase.INSPECTING,
+            progress=0,
+            current_directory=str(Path(uninstall.id).parent),
+            current_path=uninstall.id,
+            application_id=uninstall.id,
+            message="已识别应用，准备清理",
+        )
+
+        paths = [
+            path
+            for index, path in enumerate(self._cleanup_paths(uninstall))
+            if f"path:{index}" in selected_ids
+        ]
+        registry_locations = [
+            (f"registry:{index}", location)
+            for index, location in enumerate(uninstall.registry_keys)
+            if f"registry:{index}" in selected_ids
+        ]
+        total_items = sum(self._count_items(path) for path in paths)
+        total_items += sum(
+            len(location.value_names) if location.value_names else 1
+            for _, location in registry_locations
+        )
+        completed_items = 0
+        errors: list[str] = []
 
         for path in paths:
             yield self._progress(
@@ -243,7 +609,7 @@ class SoftwareUninstaller:
                     error=str(error),
                 )
 
-        for location in uninstall.registry_keys:
+        for _, location in registry_locations:
             if self._registry is None:
                 error = "未配置注册表后端，无法清理注册表"
                 errors.append(error)
@@ -295,11 +661,27 @@ class SoftwareUninstaller:
                     error=str(error),
                 )
 
+        yield from self._final_progress(
+            uninstall,
+            completed_items=completed_items,
+            total_items=total_items,
+            errors=errors,
+        )
+
+    def _final_progress(
+        self,
+        uninstall: Uninstall,
+        *,
+        completed_items: int,
+        total_items: int,
+        errors: list[str],
+    ) -> Iterator[UninstallProgress]:
         if errors:
             yield UninstallProgress(
                 phase=UninstallPhase.FAILED,
                 progress=100,
                 current_directory=uninstall.dir,
+                application_id=uninstall.id,
                 completed_items=completed_items,
                 total_items=total_items,
                 message="卸载完成，但有部分项目清理失败",
@@ -311,6 +693,7 @@ class SoftwareUninstaller:
                 phase=UninstallPhase.COMPLETED,
                 progress=100,
                 current_directory=uninstall.dir,
+                application_id=uninstall.id,
                 completed_items=completed_items,
                 total_items=total_items,
                 message="应用及其快捷方式已清理完成",
@@ -474,6 +857,19 @@ class SoftwareUninstaller:
         target_path: Path,
         install_dir: Path,
     ) -> list[UninstallRegistryRecord]:
+        return [
+            record
+            for record in self._all_registry_records()
+            if self._record_matches(
+                record,
+                shortcut_name=shortcut_name,
+                target_path=target_path,
+                install_dir=install_dir,
+            )
+        ]
+
+    def _all_registry_records(self) -> list[UninstallRegistryRecord]:
+        """读取所有卸载注册表记录，不按快捷方式名称合并。"""
         if self._registry is None:
             return []
         records: list[UninstallRegistryRecord] = []
@@ -484,14 +880,8 @@ class SoftwareUninstaller:
                 path = f"{root}\\{child}"
                 values = self._read_registry_values(hive, path)
                 record = self._record_from_values(hive, path, values)
-                if record is None or not self._record_matches(
-                    record,
-                    shortcut_name=shortcut_name,
-                    target_path=target_path,
-                    install_dir=install_dir,
-                ):
-                    continue
-                records.append(record)
+                if record is not None:
+                    records.append(record)
         return records
 
     def _read_registry_values(

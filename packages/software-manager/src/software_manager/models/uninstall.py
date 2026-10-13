@@ -18,6 +18,38 @@ class ApplicationType(StrEnum):
     UNKNOWN = "unknown"
 
 
+class UninstallMode(StrEnum):
+    """软件管理器提供的卸载模式。"""
+
+    STANDARD = "standard"
+    SIMPLE = "simple"
+
+
+class UninstallMethod(StrEnum):
+    """检测到官方卸载器时可选择的执行方式。"""
+
+    APPLICATION = "application"
+    OFFICIAL = "official"
+
+
+class CleanupRisk(StrEnum):
+    """清理动作的风险等级。"""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    BLOCKED = "blocked"
+
+
+class CleanupItemType(StrEnum):
+    """清理动作的资源类型。"""
+
+    COMMAND = "command"
+    FILE = "file"
+    DIRECTORY = "directory"
+    REGISTRY = "registry"
+
+
 class UninstallPhase(StrEnum):
     """卸载过程阶段。"""
 
@@ -42,10 +74,19 @@ class UninstallProgress(BaseModel):
         default=None,
         description="当前正在处理的文件或注册表路径",
     )
+    application_id: str | None = Field(
+        default=None,
+        description="稳定的应用标识",
+    )
+    item_id: str | None = Field(
+        default=None,
+        description="当前清理动作标识",
+    )
     completed_items: int = Field(default=0, ge=0, description="已处理项目数")
     total_items: int = Field(default=0, ge=0, description="待处理项目数")
     message: str = Field(default="", description="面向用户的进度说明")
     succeeded: bool = True
+    skipped: bool = False
     error: str | None = None
 
     @classmethod
@@ -338,3 +379,84 @@ class Uninstall(BaseModel):
         default=None,
         description="包管理器信息",
     )
+
+
+class IndexedApplication(BaseModel):
+    """快速索引中的应用候选。"""
+
+    application_id: str = Field(min_length=1, description="稳定候选标识")
+    name: str = Field(min_length=1, description="应用名称")
+    application_type: ApplicationType = Field(
+        default=ApplicationType.UNKNOWN,
+        description="应用类型",
+    )
+    publisher: str | None = Field(default=None, description="发布者")
+    version: str | None = Field(default=None, description="版本")
+    install_location: str | None = Field(default=None, description="安装目录")
+    executable_paths: list[str] = Field(
+        default_factory=list,
+        description="可执行文件路径",
+    )
+    entry_path: str | None = Field(
+        default=None,
+        description="可用于重新检查的发现入口",
+    )
+    source: str = Field(min_length=1, description="索引来源")
+    evidence: list[str] = Field(
+        default_factory=list,
+        description="命中该候选的证据",
+    )
+
+
+class CleanupItem(BaseModel):
+    """卸载计划中的一个可选择清理动作。"""
+
+    id: str = Field(min_length=1, description="清理动作稳定标识")
+    item_type: CleanupItemType = Field(description="资源类型")
+    target: str = Field(min_length=1, description="待处理的目标")
+    description: str = Field(default="", description="面向用户的动作说明")
+    risk: CleanupRisk = Field(default=CleanupRisk.MEDIUM, description="风险等级")
+    evidence: list[str] = Field(
+        default_factory=list,
+        description="证明目标属于该应用的证据",
+    )
+    selected_by_default: bool = Field(
+        default=True,
+        description="标准模式下是否默认选中",
+    )
+    allowed_in_simple: bool = Field(
+        default=False,
+        description="简易模式是否允许自动执行",
+    )
+
+
+class UninstallPlan(BaseModel):
+    """软件管理器生成的可预览卸载计划。"""
+
+    application: Uninstall
+    mode: UninstallMode
+    available_methods: list[UninstallMethod] = Field(
+        default_factory=lambda: [UninstallMethod.APPLICATION],
+        description="当前应用可用的卸载方式",
+    )
+    recommended_method: UninstallMethod = Field(
+        default=UninstallMethod.APPLICATION,
+        description="推荐使用的卸载方式",
+    )
+    official_commands: list[UninstallCommand] = Field(
+        default_factory=list,
+        description="检测到的官方卸载命令，仅供用户选择",
+    )
+    items: list[CleanupItem] = Field(
+        default_factory=list,
+        description="可供标准模式选择的清理动作",
+    )
+    snapshot: dict[str, str] = Field(
+        default_factory=dict,
+        description="执行前用于复核目标未变化的快照",
+    )
+
+    @property
+    def selected_item_ids(self) -> tuple[str, ...]:
+        """返回标准模式默认选中的动作。"""
+        return tuple(item.id for item in self.items if item.selected_by_default)
